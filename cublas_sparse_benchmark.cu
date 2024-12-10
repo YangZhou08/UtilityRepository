@@ -82,7 +82,11 @@ void runSparseMatmul(int m, int n, int k) {
 
     // Define matmul operation
     cublasLtMatmulDesc_t matmulDesc;
-    cublasLtMatmulDescCreate(&matmulDesc, CUBLAS_COMPUTE_32F, CUDA_R_32F);
+    cublasLtMatmulDescCreate(&matmulDesc, CUBLAS_COMPUTE_32F, CUDA_R_32F); 
+
+    // Define algorithm descriptor
+    cublasLtMatmulAlgo_t algo;
+    cublasLtMatmulAlgoInit(handle, CUBLAS_COMPUTE_32F, CUDA_R_32F, layoutA, layoutB, layoutC, layoutC, &algo);
 
     // Perform matrix multiplication
     const float alpha = 1.0f, beta = 0.0f; 
@@ -98,8 +102,7 @@ void runSparseMatmul(int m, int n, int k) {
         &alpha, d_A, layoutA, // Sparse A
         d_B, layoutB,         // Dense B
         &beta, d_C, layoutC,  // Output C
-        // nullptr, nullptr, 0, nullptr 
-        nullptr, workspace, workspace_size, nullptr); 
+        &algo, workspace, workspace_size, nullptr);
 
     cudaDeviceSynchronize();
 
