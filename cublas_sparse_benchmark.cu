@@ -113,7 +113,7 @@ void runSparseMatmul(int m, int n, int k) {
 
     std::cout << "Sparse matrix multiplication (m=" << m << ", n=" << n << ", k=" << k
           << ") average runtime over " << num_iterations << " iterations: "
-          << avg_time_per_iteration << " seconds." << std::endl; 
+          << avg_time_per_iteration << " ms" << std::endl; 
 
     // std::cout << "Sparse matrix multiplication (m=" << m << ", n=" << n << ", k=" << k
     //           << ") took " << elapsed.count() << " seconds." << std::endl; 
