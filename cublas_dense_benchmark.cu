@@ -4,6 +4,23 @@
 #include <vector>
 #include <chrono>
 
+/ Error checking macros
+#define CHECK_CUDA(call) { \
+    cudaError_t err = call; \
+    if (err != cudaSuccess) { \
+        printf("CUDA error: %s at line %d\n", cudaGetErrorString(err), __LINE__); \
+        exit(1); \
+    } \
+}
+
+#define CHECK_CUBLAS(call) { \
+    cublasStatus_t status = call; \
+    if (status != CUBLAS_STATUS_SUCCESS) { \
+        printf("cuBLAS error: %d at line %d\n", status, __LINE__); \
+        exit(1); \
+    } \
+} 
+
 // Initialize random values for matrices
 void initializeMatrix(std::vector<float>& mat, int rows, int cols) {
     for (int i = 0; i < rows * cols; ++i) {
