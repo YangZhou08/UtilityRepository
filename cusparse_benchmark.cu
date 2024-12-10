@@ -60,7 +60,20 @@ int main() {
     cusparseLtMatmulPlanInit(&handle, &plan, &matmul, &alg_sel);
 
     // Prune matrix A
-    cusparseLtSpMMAPrune(&handle, &matmul, dA, dA, CUSPARSELT_PRUNE_SPMMA_TILE, stream);
+    // Prune matrix A (in-place)
+    cusparseStatus_t status = cusparseLtSpMMAPrune(
+        &handle,              // Pointer to cuSPARSELt handle
+        &matmul,              // Pointer to matmul descriptor
+        dA,                   // Input matrix (device pointer)
+        dA,                   // Output matrix (in-place pruning)
+        CUSPARSELT_PRUNE_SPMMA_TILE, // Pruning algorithm
+        stream);              // CUDA stream
+
+    // Check for errors
+    if (status != CUSPARSE_STATUS_SUCCESS) {
+        std::cerr << "Matrix pruning failed!" << std::endl;
+        return EXIT_FAILURE;
+    }
 
     // Check pruning correctness
     int *d_valid;
@@ -76,11 +89,31 @@ int main() {
     }
 
     // Compress matrix A
+    // size_t compressed_size;
+    // cusparseLtSpMMACompressedSize(&handle, &plan, &compressed_size);
     size_t compressed_size;
-    cusparseLtSpMMACompressedSize(&handle, &plan, &compressed_size);
-    void *dA_compressed;
-    cudaMalloc(&dA_compressed, compressed_size);
-    cusparseLtSpMMACompress(&handle, &plan, dA, dA_compressed, stream);
+    size_t compress_buffer_size;
+
+    cusparseStatus_t status = cusparseLtSpMMACompressedSize(
+        &handle,              // Pointer to cuSPARSELt handle
+        &plan,                // Pointer to matmul plan
+        &compressed_size,     // Pointer to store compressed size
+        &compress_buffer_size // Pointer to store buffer size
+    );
+    
+    void *dA_compressed; 
+    void* compress_buffer; 
+    cudaMalloc(&dA_compressed, compressed_size); 
+    cudaMalloc(&compress_buffer, compress_buffer_size); 
+    // cusparseLtSpMMACompress(&handle, &plan, dA, dA_compressed, stream); 
+    cusparseStatus_t compress_status = cusparseLtSpMMACompress(
+        &handle,              // Pointer to cuSPARSELt handle
+        &plan,                // Pointer to matmul plan
+        dA,                   // Dense input matrix (device pointer)
+        dA_compressed,        // Output compressed matrix (device pointer)
+        compress_buffer,      // Temporary buffer for compression (device pointer)
+        stream                // CUDA stream
+    ); 
 
     // Allocate workspace
     size_t workspace_size;
