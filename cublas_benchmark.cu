@@ -1,8 +1,10 @@
 #include <cuda_runtime.h>
-#include <cublas_v2.h>
+#include <cublasLt.h>
 #include <iostream>
 #include <vector>
 #include <chrono>
+#include <cmath>
+#include <cstring>
 
 // Initialize random values for matrices
 void initializeMatrix(std::vector<float>& mat, int rows, int cols) {
@@ -11,16 +13,43 @@ void initializeMatrix(std::vector<float>& mat, int rows, int cols) {
     }
 }
 
-// Function to perform cuBLAS matrix multiplication
-void runCuBLAS(int m, int n, int k) {
+// Convert a dense matrix to 2-out-of-4 sparsity format
+void convertTo2OutOf4Sparsity(const std::vector<float>& dense, std::vector<float>& sparse, int rows, int cols) {
+    sparse.resize(rows * cols);
+    for (int i = 0; i < rows; ++i) {
+        for (int j = 0; j < cols; j += 4) {
+            // Retain the two largest values in every 4-element block
+            std::array<int, 4> indices = {j, j + 1, j + 2, j + 3};
+            std::partial_sort(indices.begin(), indices.begin() + 2, indices.end(),
+                              [&dense, i, cols](int lhs, int rhs) {
+                                  return std::abs(dense[i * cols + lhs]) > std::abs(dense[i * cols + rhs]);
+                              });
+
+            for (int k = 0; k < 4; ++k) {
+                if (k == indices[0] % 4 || k == indices[1] % 4) {
+                    sparse[i * cols + j + k] = dense[i * cols + j + k];
+                } else {
+                    sparse[i * cols + j + k] = 0.0f;
+                }
+            }
+        }
+    }
+}
+
+// Perform sparse matrix multiplication using cuBLASLt
+void runSparseMatmul(int m, int n, int k) {
     // Host matrices
     std::vector<float> h_A(m * k);
     std::vector<float> h_B(k * n);
     std::vector<float> h_C(m * n);
+    std::vector<float> h_sparse_A;
 
-    // Initialize matrices with random values
+    // Initialize matrices
     initializeMatrix(h_A, m, k);
     initializeMatrix(h_B, k, n);
+
+    // Convert A to 2-out-of-4 sparse format
+    convertTo2OutOf4Sparsity(h_A, h_sparse_A, m, k);
 
     // Device matrices
     float *d_A, *d_B, *d_C;
@@ -28,51 +57,62 @@ void runCuBLAS(int m, int n, int k) {
     cudaMalloc(&d_B, k * n * sizeof(float));
     cudaMalloc(&d_C, m * n * sizeof(float));
 
-    // Copy host matrices to device
-    cudaMemcpy(d_A, h_A.data(), m * k * sizeof(float), cudaMemcpyHostToDevice);
+    // Copy matrices to device
+    cudaMemcpy(d_A, h_sparse_A.data(), m * k * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(d_B, h_B.data(), k * n * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemset(d_C, 0, m * n * sizeof(float));
 
-    // Create cuBLAS handle
-    cublasHandle_t handle;
-    cublasCreate(&handle);
+    // Create cuBLASLt handle
+    cublasLtHandle_t handle;
+    cublasLtCreate(&handle);
+
+    // Define matrix layouts
+    cublasLtMatrixLayout_t layoutA, layoutB, layoutC;
+    cublasLtMatrixLayoutCreate(&layoutA, CUDA_R_32F, m, k, m); // Leading dimension = m
+    cublasLtMatrixLayoutCreate(&layoutB, CUDA_R_32F, k, n, k); // Leading dimension = k
+    cublasLtMatrixLayoutCreate(&layoutC, CUDA_R_32F, m, n, m); // Leading dimension = m
+
+    // Define matmul operation
+    cublasLtMatmulDesc_t matmulDesc;
+    cublasLtMatmulDescCreate(&matmulDesc, CUBLAS_COMPUTE_32F, CUDA_R_32F);
 
     // Perform matrix multiplication
     const float alpha = 1.0f, beta = 0.0f;
 
     auto start = std::chrono::high_resolution_clock::now();
 
-    cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N,
-                m, n, k,             // Matrix dimensions
-                &alpha,              // Alpha
-                d_A, m,              // Matrix A and leading dimension
-                d_B, k,              // Matrix B and leading dimension
-                &beta,               // Beta
-                d_C, m);             // Matrix C and leading dimension
+    cublasLtMatmul(
+        handle, matmulDesc,
+        &alpha, d_A, layoutA, // Sparse A
+        d_B, layoutB,         // Dense B
+        &beta, d_C, layoutC,  // Output C
+        nullptr, nullptr, 0, nullptr);
 
     cudaDeviceSynchronize();
 
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = end - start;
-    std::cout << "Matrix multiplication (m=" << m << ", n=" << n << ", k=" << k
+
+    std::cout << "Sparse matrix multiplication (m=" << m << ", n=" << n << ", k=" << k
               << ") took " << elapsed.count() << " seconds." << std::endl;
 
     // Copy result back to host
     cudaMemcpy(h_C.data(), d_C, m * n * sizeof(float), cudaMemcpyDeviceToHost);
 
-    // Clean up
+    // Cleanup
+    cublasLtMatmulDescDestroy(matmulDesc);
+    cublasLtMatrixLayoutDestroy(layoutA);
+    cublasLtMatrixLayoutDestroy(layoutB);
+    cublasLtMatrixLayoutDestroy(layoutC);
+    cublasLtDestroy(handle);
     cudaFree(d_A);
     cudaFree(d_B);
     cudaFree(d_C);
-    cublasDestroy(handle);
 }
 
 int main() {
-    // Example: Multiply two 1024 x 1024 matrices
     int m = 1024, n = 1024, k = 1024;
-
-    std::cout << "Starting cuBLAS matrix multiplication..." << std::endl;
-    runCuBLAS(m, n, k);
-
+    std::cout << "Starting cuBLASLt sparse matrix multiplication benchmark..." << std::endl;
+    runSparseMatmul(m, n, k);
     return 0;
-} 
+}
