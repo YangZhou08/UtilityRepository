@@ -125,7 +125,8 @@ void runDenseMatmul(int m, int n, int k) {
 
 int main() {
     // Example: Multiply two 1024 x 1024 matrices
-    int m = 1024, n = 1024, k = 1024;
+    // int m = 1024, n = 1024, k = 1024; 
+    int m = 128, n = 128, k = 128; 
 
     std::cout << "Starting cuBLAS dense matrix multiplication benchmark..." << std::endl;
     runDenseMatmul(m, n, k);
