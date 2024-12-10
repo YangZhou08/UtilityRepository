@@ -134,16 +134,11 @@ int main() {
         cudaMalloc(&d_workspace, workspace_size);
     } 
 
-    // Create CUDA events
-    cudaEvent_t start, stop;
-    cudaEventCreate(&start);
-    cudaEventCreate(&stop);
-
     // Record the start event
     cudaEventRecord(start, stream); 
 
     // Perform matrix multiplication
-    cusparseLtMatmul(&handle, &plan, &alpha, dA_compressed, dB, &beta, dC, dD, d_workspace, &stream, 0); 
+    cusparseStatus_t matmul_status = cusparseLtMatmul(&handle, &plan, &alpha, dA_compressed, dB, &beta, dC, dD, d_workspace, &stream, 0); 
 
     // Record the stop event
     cudaEventRecord(stop, stream);
