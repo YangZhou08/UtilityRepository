@@ -105,7 +105,7 @@ void runSparseMatmul(int m, int n, int k) {
     } 
 
     // Record the stop event 
-    cudaDeviceSynchronize(); 
+    // cudaDeviceSynchronize(); 
     cudaEventRecord(stop, stream); 
     cudaStreamSynchronize(stream); 
     // cudaEventSynchronize(stop); 
