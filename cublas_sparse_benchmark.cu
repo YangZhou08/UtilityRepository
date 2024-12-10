@@ -1,140 +1,83 @@
 #include <cuda_runtime.h>
-#include <cublasLt.h>
-#include <iostream>
+#include <cusparseLt.h>
 #include <vector>
+#include <iostream>
 #include <chrono>
-#include <cmath>
-#include <cstring>
 
-// Initialize random values for matrices
-void initializeMatrix(std::vector<float>& mat, int rows, int cols) {
+// Function to initialize matrices with random values
+void initializeMatrix(std::vector<__half>& mat, int rows, int cols) {
     for (int i = 0; i < rows * cols; ++i) {
         mat[i] = static_cast<float>(rand()) / RAND_MAX;
     }
 }
 
-// Convert a dense matrix to 2-out-of-4 sparsity format
-void convertTo2OutOf4Sparsity(const std::vector<float>& dense, std::vector<float>& sparse, int rows, int cols) {
-    sparse.resize(rows * cols);
-    for (int i = 0; i < rows; ++i) {
-        for (int j = 0; j < cols; j += 4) {
-            // Retain the two largest values in every 4-element block
-            // std::array<int, 4> indices = {j, j + 1, j + 2, j + 3}; 
-            std::vector<int> indices = {j, j + 1, j + 2, j + 3};
-            // std::partial_sort(indices.begin(), indices.begin() + 2, indices.end(),
-            //                   [&dense, i, cols](int lhs, int rhs) {
-            //                       return std::abs(dense[i * cols + lhs]) > std::abs(dense[i * cols + rhs]); 
-            //                   }); 
-            for (int a = 0; a < 2; ++a) {
-                for (int b = a + 1; b < 4; ++b) {
-                    if (std::abs(dense[i * cols + indices[b]]) > std::abs(dense[i * cols + indices[a]])) {
-                        std::swap(indices[a], indices[b]);
-                    }
-                }
-            } 
-
-            for (int k = 0; k < 4; ++k) {
-                if (k == indices[0] % 4 || k == indices[1] % 4) {
-                    sparse[i * cols + j + k] = dense[i * cols + j + k];
-                } else {
-                    sparse[i * cols + j + k] = 0.0f;
-                }
-            }
-        }
-    }
-}
-
-// Perform sparse matrix multiplication using cuBLASLt
+// Sparse Matrix Multiplication
 void runSparseMatmul(int m, int n, int k) {
     // Host matrices
-    std::vector<float> h_A(m * k);
-    std::vector<float> h_B(k * n);
-    std::vector<float> h_C(m * n);
-    std::vector<float> h_sparse_A;
+    std::vector<__half> h_A(m * k); // Dense matrix A
+    std::vector<__half> h_B(k * n); // Dense matrix B
+    std::vector<__half> h_C(m * n); // Result matrix C
 
-    // Initialize matrices
+    // Initialize matrices with random values
     initializeMatrix(h_A, m, k);
     initializeMatrix(h_B, k, n);
 
-    // Convert A to 2-out-of-4 sparse format
-    convertTo2OutOf4Sparsity(h_A, h_sparse_A, m, k);
-
     // Device matrices
-    float *d_A, *d_B, *d_C;
-    cudaMalloc(&d_A, m * k * sizeof(float));
-    cudaMalloc(&d_B, k * n * sizeof(float));
-    cudaMalloc(&d_C, m * n * sizeof(float));
+    __half *d_A, *d_B, *d_C, *d_A_compressed;
+    cudaMalloc(&d_A, m * k * sizeof(__half));
+    cudaMalloc(&d_B, k * n * sizeof(__half));
+    cudaMalloc(&d_C, m * n * sizeof(__half));
 
-    // Copy matrices to device
-    cudaMemcpy(d_A, h_sparse_A.data(), m * k * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_B, h_B.data(), k * n * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemset(d_C, 0, m * n * sizeof(float));
+    // Copy host matrices to device
+    cudaMemcpy(d_A, h_A.data(), m * k * sizeof(__half), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_B, h_B.data(), k * n * sizeof(__half), cudaMemcpyHostToDevice);
+    cudaMemset(d_C, 0, m * n * sizeof(__half));
 
-    // Create cuBLASLt handle
-    cublasLtHandle_t handle;
-    cublasLtCreate(&handle);
+    // cuSPARSELt setup
+    cusparseLtHandle_t handle;
+    cusparseLtInit(&handle);
 
-    // Define matrix layouts
-    cublasLtMatrixLayout_t layoutA, layoutB, layoutC;
-    cublasLtMatrixLayoutCreate(&layoutA, CUDA_R_32F, m, k, m); // Leading dimension = m 
+    cusparseLtMatDescriptor_t matA, matB, matC;
+    cusparseLtMatmulDescriptor_t matmul;
+    cusparseLtMatmulAlgSelection_t alg_sel;
+    cusparseLtMatmulPlan_t plan;
 
-    cublasLtMatrixLayoutSetAttribute(layoutA, 
-                                  CUBLASLT_MATRIX_LAYOUT_SPARSE_MODE, 
-                                  &CUBLASLT_SPARSITY_2_4, 
-                                  sizeof(CUBLASLT_SPARSITY_2_4)); 
-    
-    cublasLtMatrixLayoutCreate(&layoutB, CUDA_R_32F, k, n, k); // Leading dimension = k
-    cublasLtMatrixLayoutCreate(&layoutC, CUDA_R_32F, m, n, m); // Leading dimension = m
+    cudaStream_t stream = nullptr;
+    size_t compressed_size, compress_buffer_size;
+    void* compress_buffer = nullptr;
 
-    // Define matmul operation
-    cublasLtMatmulDesc_t matmulDesc;
-    cublasLtMatmulDescCreate(&matmulDesc, CUBLAS_COMPUTE_32F, CUDA_R_32F); 
+    // Descriptors
+    cusparseLtStructuredDescriptorInit(&handle, &matA, m, k, k, 16, CUDA_R_16F, CUSPARSE_ORDER_ROW, CUSPARSELT_SPARSITY_50_PERCENT);
+    cusparseLtDenseDescriptorInit(&handle, &matB, k, n, n, 16, CUDA_R_16F, CUSPARSE_ORDER_ROW);
+    cusparseLtDenseDescriptorInit(&handle, &matC, m, n, n, 16, CUDA_R_16F, CUSPARSE_ORDER_ROW);
 
-    // Define algorithm descriptor
-    cublasLtMatmulAlgo_t algo;
-    // cublasLtMatmulAlgoInit(handle, CUBLAS_COMPUTE_32F, CUDA_R_32F, layoutA, layoutB, layoutC, layoutC, &algo); 
-    // cublasLtMatmulAlgoInit(handle, CUBLAS_COMPUTE_32F, CUDA_R_32F, m, n, k, &algo); 
-    cublasStatus_t status = cublasLtMatmulAlgoInit(
-        handle,                 // cublasLtHandle_t
-        CUBLAS_COMPUTE_32F,     // Compute type
-        CUDA_R_32F,             // Scale type
-        CUDA_R_32F,             // A type
-        CUDA_R_32F,             // B type
-        CUDA_R_32F,             // C type
-        CUDA_R_32F,             // D type
-        0,                      // Default algorithm ID
-        &algo                   // Algorithm descriptor
-    ); 
+    // Matmul descriptor
+    cusparseLtMatmulDescriptorInit(&handle, &matmul, CUSPARSE_OPERATION_NON_TRANSPOSE, CUSPARSE_OPERATION_NON_TRANSPOSE, &matA, &matB, &matC, &matC, CUSPARSE_COMPUTE_32F);
+    cusparseLtMatmulAlgSelectionInit(&handle, &alg_sel, &matmul, CUSPARSELT_MATMUL_ALG_DEFAULT);
+    cusparseLtMatmulPlanInit(&handle, &plan, &matmul, &alg_sel);
 
-    if (status != CUBLAS_STATUS_SUCCESS) {
-        std::cerr << "Error initializing cublasLtMatmulAlgo for 2-out-of-4 sparsity: " << status << std::endl;
-        return;
-    } 
+    // Prune and compress
+    cusparseLtSpMMAPrune(&handle, &matmul, d_A, d_A, CUSPARSELT_PRUNE_SPMMA_TILE, stream);
+    cusparseLtSpMMACompressedSize(&handle, &plan, &compressed_size, &compress_buffer_size);
 
-    // Enable 2-out-of-4 sparsity on A
-    cublasLtMatmulAlgoConfigSetAttribute(&algo, CUBLASLT_ALGO_CONFIG_SPARSE_MODE, 
-                                        &CUBLASLT_SPARSITY_2_4, sizeof(CUBLASLT_SPARSITY_2_4));
+    cudaMalloc(&d_A_compressed, compressed_size);
+    cudaMalloc(&compress_buffer, compress_buffer_size);
+    cusparseLtSpMMACompress(&handle, &plan, &matA, d_A, d_A_compressed, compress_buffer, stream);
 
-    // Perform matrix multiplication
-    const float alpha = 1.0f, beta = 0.0f; 
+    // Workspace
+    size_t workspace_size;
+    void* d_workspace = nullptr;
+    cusparseLtMatmulGetWorkspace(&handle, &plan, &workspace_size);
+    if (workspace_size > 0) {
+        cudaMalloc(&d_workspace, workspace_size);
+    }
 
-    size_t workspace_size = 1024 * 1024 * 8; // Example: 8 MB
-    void* workspace;
-    cudaMalloc(&workspace, workspace_size); 
+    // Timer
+    auto start = std::chrono::high_resolution_clock::now();
 
-    auto start = std::chrono::high_resolution_clock::now(); 
-
-    cublasLtMatmul(
-        handle, 
-        matmulDesc,
-        &alpha, 
-        d_A, layoutA,  // Sparse A
-        d_B, layoutB,          // Dense B
-        &beta, 
-        d_C, layoutC,   // Output C 
-        d_C, layoutC,   // Output C 
-        &algo, workspace, workspace_size, nullptr  // Algo, workspace, and stream 
-    ); 
+    // Matrix multiplication
+    float alpha = 1.0f, beta = 0.0f;
+    cusparseLtMatmul(&handle, &plan, &alpha, d_A_compressed, d_B, &beta, d_C, d_C, d_workspace, nullptr, 0);
 
     cudaDeviceSynchronize();
 
@@ -144,24 +87,29 @@ void runSparseMatmul(int m, int n, int k) {
     std::cout << "Sparse matrix multiplication (m=" << m << ", n=" << n << ", k=" << k
               << ") took " << elapsed.count() << " seconds." << std::endl;
 
-    // Copy result back to host
-    cudaMemcpy(h_C.data(), d_C, m * n * sizeof(float), cudaMemcpyDeviceToHost);
-
     // Cleanup
-    cublasLtMatmulDescDestroy(matmulDesc);
-    cublasLtMatrixLayoutDestroy(layoutA);
-    cublasLtMatrixLayoutDestroy(layoutB);
-    cublasLtMatrixLayoutDestroy(layoutC);
-    cublasLtDestroy(handle);
     cudaFree(d_A);
     cudaFree(d_B);
-    cudaFree(d_C); 
-    cudaFree(workspace); 
+    cudaFree(d_C);
+    cudaFree(d_A_compressed);
+    cudaFree(compress_buffer);
+    if (workspace_size > 0) {
+        cudaFree(d_workspace);
+    }
+
+    cusparseLtMatDescriptorDestroy(&matA);
+    cusparseLtMatDescriptorDestroy(&matB);
+    cusparseLtMatDescriptorDestroy(&matC);
+    cusparseLtMatmulPlanDestroy(&plan);
+    cusparseLtDestroy(&handle);
 }
 
 int main() {
+    // Example: Multiply two 1024 x 1024 matrices
     int m = 1024, n = 1024, k = 1024;
-    std::cout << "Starting cuBLASLt sparse matrix multiplication benchmark..." << std::endl;
+
+    std::cout << "Starting cuSPARSELt sparse matrix multiplication benchmark..." << std::endl;
     runSparseMatmul(m, n, k);
+
     return 0;
-}
+} 
