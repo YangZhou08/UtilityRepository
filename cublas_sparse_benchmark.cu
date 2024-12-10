@@ -113,7 +113,8 @@ void runSparseMatmul(int m, int n, int k) {
     // Calculate the elapsed time
     cudaEventElapsedTime(&elapsed_time_ms, start, stop); 
 
-    // Calculate average runtime
+    // Calculate average runtime 
+    std::cout << "Elapsed time: " << elapsed_time_ms << " ms" << std::endl; 
     double avg_time_per_iteration = elapsed_time_ms / num_iterations; 
 
     std::cout << "Sparse matrix multiplication (m=" << m << ", n=" << n << ", k=" << k
