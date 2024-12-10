@@ -129,7 +129,8 @@ int main() {
     // int m = 128, n = 128, k = 128; 
     // int m = 256, n = 256, k = 256; 
     // int m = 512, n = 512, k = 512; 
-    int m = 1024, n = 1024, k = 1024; 
+    // int m = 1024, n = 1024, k = 1024; 
+    int m = 2048, n = 2048, k = 2048; 
 
     std::cout << "Starting cuBLAS dense matrix multiplication benchmark..." << std::endl;
     runDenseMatmul(m, n, k);
