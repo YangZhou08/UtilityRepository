@@ -4,7 +4,7 @@
 #include <vector>
 #include <chrono>
 
-/ Error checking macros
+// Error checking macros
 #define CHECK_CUDA(call) { \
     cudaError_t err = call; \
     if (err != cudaSuccess) { \
