@@ -26,12 +26,19 @@ void runDenseMatmul(int m, int n, int k) {
     float *d_A, *d_B, *d_C;
     cudaMalloc(&d_A, m * k * sizeof(float));
     cudaMalloc(&d_B, k * n * sizeof(float));
-    cudaMalloc(&d_C, m * n * sizeof(float));
+    cudaMalloc(&d_C, m * n * sizeof(float)); 
+
+    // Create CUDA events
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop); 
 
     // Copy host matrices to device
     cudaMemcpy(d_A, h_A.data(), m * k * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(d_B, h_B.data(), k * n * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemset(d_C, 0, m * n * sizeof(float));
+    cudaMemset(d_C, 0, m * n * sizeof(float)); 
+
+    float elapsed_time_ms = 0.0f; 
 
     // Create cuBLAS handle
     cublasHandle_t handle;
@@ -40,9 +47,20 @@ void runDenseMatmul(int m, int n, int k) {
     int num_iterations = 1000;  
 
     // Perform matrix multiplication
-    const float alpha = 1.0f, beta = 0.0f;
+    const float alpha = 1.0f, beta = 0.0f; 
 
-    auto start = std::chrono::high_resolution_clock::now();
+    for (int i = 0; i < 10; ++i) {
+        cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N,
+                    m, n, k,             // Matrix dimensions
+                    &alpha,              // Alpha
+                    d_A, m,              // Matrix A and leading dimension
+                    d_B, k,              // Matrix B and leading dimension
+                    &beta,               // Beta
+                    d_C, m);             // Matrix C and leading dimension 
+    } 
+
+    // Record the start event
+    cudaEventRecord(start, 0); 
 
     for (int i = 0; i < num_iterations; ++i) {
         cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N,
@@ -52,15 +70,19 @@ void runDenseMatmul(int m, int n, int k) {
                     d_B, k,              // Matrix B and leading dimension
                     &beta,               // Beta
                     d_C, m);             // Matrix C and leading dimension 
-
-        cudaDeviceSynchronize(); 
     } 
 
-    auto end = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> elapsed = end - start; 
+    // Record the stop event 
+    // cudaDeviceSynchronize(); 
+    cudaEventRecord(stop, 0); 
+    cudaEventSynchronize(stop); 
+    // cudaEventSynchronize(stop); 
+
+    // Calculate the elapsed time
+    cudaEventElapsedTime(&elapsed_time_ms, start, stop); 
 
     // Calculate average runtime
-    double avg_time_per_iteration = elapsed.count() / num_iterations; 
+    double avg_time_per_iteration = elapsed_time_ms.count() / num_iterations; 
 
     std::cout << "Sparse matrix multiplication (m=" << m << ", n=" << n << ", k=" << k
           << ") average runtime over " << num_iterations << " iterations: "
@@ -76,7 +98,10 @@ void runDenseMatmul(int m, int n, int k) {
     cudaFree(d_A);
     cudaFree(d_B);
     cudaFree(d_C);
-    cublasDestroy(handle);
+    cublasDestroy(handle); 
+
+    cudaEventDestroy(start);
+    cudaEventDestroy(stop); 
 }
 
 int main() {
