@@ -82,7 +82,7 @@ void runDenseMatmul(int m, int n, int k) {
     cudaEventElapsedTime(&elapsed_time_ms, start, stop); 
 
     // Calculate average runtime
-    double avg_time_per_iteration = elapsed_time_ms.count() / num_iterations; 
+    double avg_time_per_iteration = elapsed_time_ms / num_iterations; 
 
     std::cout << "Sparse matrix multiplication (m=" << m << ", n=" << n << ", k=" << k
           << ") average runtime over " << num_iterations << " iterations: "
