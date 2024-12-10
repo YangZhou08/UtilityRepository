@@ -35,27 +35,39 @@ void runDenseMatmul(int m, int n, int k) {
 
     // Create cuBLAS handle
     cublasHandle_t handle;
-    cublasCreate(&handle);
+    cublasCreate(&handle); 
+
+    int num_iterations = 1000;  
 
     // Perform matrix multiplication
     const float alpha = 1.0f, beta = 0.0f;
 
     auto start = std::chrono::high_resolution_clock::now();
 
-    cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N,
-                m, n, k,             // Matrix dimensions
-                &alpha,              // Alpha
-                d_A, m,              // Matrix A and leading dimension
-                d_B, k,              // Matrix B and leading dimension
-                &beta,               // Beta
-                d_C, m);             // Matrix C and leading dimension
+    for (int i = 0; i < num_iterations; ++i) {
+        cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N,
+                    m, n, k,             // Matrix dimensions
+                    &alpha,              // Alpha
+                    d_A, m,              // Matrix A and leading dimension
+                    d_B, k,              // Matrix B and leading dimension
+                    &beta,               // Beta
+                    d_C, m);             // Matrix C and leading dimension 
 
-    cudaDeviceSynchronize();
+        cudaDeviceSynchronize(); 
+    } 
 
     auto end = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> elapsed = end - start;
-    std::cout << "Dense matrix multiplication (m=" << m << ", n=" << n << ", k=" << k
-              << ") took " << elapsed.count() << " seconds." << std::endl;
+    std::chrono::duration<double> elapsed = end - start; 
+
+    // Calculate average runtime
+    double avg_time_per_iteration = elapsed.count() / num_iterations; 
+
+    std::cout << "Sparse matrix multiplication (m=" << m << ", n=" << n << ", k=" << k
+          << ") average runtime over " << num_iterations << " iterations: "
+          << avg_time_per_iteration << " seconds." << std::endl; 
+
+    // std::cout << "Dense matrix multiplication (m=" << m << ", n=" << n << ", k=" << k
+    //           << ") took " << elapsed.count() << " seconds." << std::endl; 
 
     // Copy result back to host
     cudaMemcpy(h_C.data(), d_C, m * n * sizeof(float), cudaMemcpyDeviceToHost);
