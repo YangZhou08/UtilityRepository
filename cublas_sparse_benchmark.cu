@@ -44,7 +44,15 @@ void runSparseMatmul(int m, int n, int k) {
 
     cudaStream_t stream = nullptr;
     size_t compressed_size, compress_buffer_size;
-    void* compress_buffer = nullptr;
+    void* compress_buffer = nullptr; 
+
+    // Create CUDA events
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+
+    // Record the start event
+    cudaEventRecord(start, stream);
 
     // Descriptors
     cusparseLtStructuredDescriptorInit(&handle, &matA, m, k, k, 16, CUDA_R_16F, CUSPARSE_ORDER_ROW, CUSPARSELT_SPARSITY_50_PERCENT);
@@ -54,7 +62,9 @@ void runSparseMatmul(int m, int n, int k) {
     // Matmul descriptor
     cusparseLtMatmulDescriptorInit(&handle, &matmul, CUSPARSE_OPERATION_NON_TRANSPOSE, CUSPARSE_OPERATION_NON_TRANSPOSE, &matA, &matB, &matC, &matC, CUSPARSE_COMPUTE_32F);
     cusparseLtMatmulAlgSelectionInit(&handle, &alg_sel, &matmul, CUSPARSELT_MATMUL_ALG_DEFAULT);
-    cusparseLtMatmulPlanInit(&handle, &plan, &matmul, &alg_sel);
+    cusparseLtMatmulPlanInit(&handle, &plan, &matmul, &alg_sel); 
+
+    float elapsed_time_ms = 0.0f; 
 
     // Prune and compress
     cusparseLtSpMMAPrune(&handle, &matmul, d_A, d_A, CUSPARSELT_PRUNE_SPMMA_TILE, stream);
@@ -82,21 +92,24 @@ void runSparseMatmul(int m, int n, int k) {
 
     int num_iterations = 1000; 
 
-    // Timer
-    auto start = std::chrono::high_resolution_clock::now();
+    // Record the start event
+    cudaEventRecord(start, stream); 
 
     // Matrix multiplication
     float alpha = 1.0f, beta = 0.0f; 
     for (int i = 0; i < num_iterations; ++i) {
         cusparseLtMatmul(&handle, &plan, &alpha, d_A_compressed, d_B, &beta, d_C, d_C, d_workspace, nullptr, 0); 
-        cudaDeviceSynchronize();
     } 
 
-    auto end = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> elapsed = end - start; 
+    // Record the stop event
+    cudaEventRecord(stop, stream);
+    cudaEventSynchronize(stop); 
+
+    // Calculate the elapsed time
+    cudaEventElapsedTime(&elapsed_time_ms, start, stop); 
 
     // Calculate average runtime
-    double avg_time_per_iteration = elapsed.count() / num_iterations; 
+    double avg_time_per_iteration = elapsed_time_ms / num_iterations; 
 
     std::cout << "Sparse matrix multiplication (m=" << m << ", n=" << n << ", k=" << k
           << ") average runtime over " << num_iterations << " iterations: "
