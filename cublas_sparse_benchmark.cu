@@ -91,6 +91,9 @@ void runSparseMatmul(int m, int n, int k) {
     } 
 
     int num_iterations = 1000; 
+    for (int i = 0; i < 10; ++i) {
+        cusparseLtMatmul(&handle, &plan, &alpha, d_A_compressed, d_B, &beta, d_C, d_C, d_workspace, nullptr, 0); 
+    } 
 
     // Record the start event
     cudaEventRecord(start, stream); 
