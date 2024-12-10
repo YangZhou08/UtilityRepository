@@ -42,7 +42,9 @@ void runSparseMatmul(int m, int n, int k) {
     cusparseLtMatmulAlgSelection_t alg_sel;
     cusparseLtMatmulPlan_t plan;
 
-    cudaStream_t stream = nullptr;
+    // cudaStream_t stream = nullptr; 
+    cudaStream_t stream; 
+    cudaStreamCreate(&stream); 
     size_t compressed_size, compress_buffer_size;
     void* compress_buffer = nullptr; 
 
@@ -50,9 +52,6 @@ void runSparseMatmul(int m, int n, int k) {
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
-
-    // Record the start event
-    cudaEventRecord(start, stream);
 
     // Descriptors
     cusparseLtStructuredDescriptorInit(&handle, &matA, m, k, k, 16, CUDA_R_16F, CUSPARSE_ORDER_ROW, CUSPARSELT_SPARSITY_50_PERCENT);
@@ -97,18 +96,19 @@ void runSparseMatmul(int m, int n, int k) {
     } 
 
     // Record the start event
-    cudaEventRecord(start, 0); 
+    cudaEventRecord(start, stream); 
 
     // Matrix multiplication
     // float alpha = 1.0f, beta = 0.0f; 
     for (int i = 0; i < num_iterations; ++i) {
-        cusparseLtMatmul(&handle, &plan, &alpha, d_A_compressed, d_B, &beta, d_C, d_C, d_workspace, nullptr, 0); 
+        cusparseLtMatmul(&handle, &plan, &alpha, d_A_compressed, d_B, &beta, d_C, d_C, d_workspace, &stream, 0); 
     } 
 
     // Record the stop event 
     cudaDeviceSynchronize(); 
-    cudaEventRecord(stop, 0); 
-    cudaEventSynchronize(stop); 
+    cudaEventRecord(stop, stream); 
+    cudaStreamSynchronize(stream); 
+    // cudaEventSynchronize(stop); 
 
     // Calculate the elapsed time
     cudaEventElapsedTime(&elapsed_time_ms, start, stop); 
@@ -138,6 +138,10 @@ void runSparseMatmul(int m, int n, int k) {
     cusparseLtMatDescriptorDestroy(&matC);
     cusparseLtMatmulPlanDestroy(&plan);
     cusparseLtDestroy(&handle);
+
+    cudaEventDestroy(start);
+    cudaEventDestroy(stop);
+    cudaStreamDestroy(stream);
 }
 
 int main() {
