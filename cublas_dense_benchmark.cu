@@ -59,6 +59,8 @@ void runDenseMatmul(int m, int n, int k) {
                     d_C, m);             // Matrix C and leading dimension 
     } 
 
+    cudaDeviceSynchronize(); 
+
     // Record the start event
     cudaEventRecord(start, 0); 
 
