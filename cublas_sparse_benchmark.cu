@@ -62,7 +62,15 @@ void runSparseMatmul(int m, int n, int k) {
 
     cudaMalloc(&d_A_compressed, compressed_size);
     cudaMalloc(&compress_buffer, compress_buffer_size);
-    cusparseLtSpMMACompress(&handle, &plan, &matA, d_A, d_A_compressed, compress_buffer, stream);
+    // cusparseLtSpMMACompress(&handle, &plan, &matA, d_A, d_A_compressed, compress_buffer, stream); 
+    cusparseStatus_t compress_status = cusparseLtSpMMACompress(
+        &handle,              // Pointer to cuSPARSELt handle
+        &plan,                // Pointer to matmul plan
+        dA,                   // Dense input matrix (device pointer)
+        dA_compressed,        // Output compressed matrix (device pointer)
+        compress_buffer,      // Temporary buffer for compression (device pointer)
+        stream                // CUDA stream
+    ); 
 
     // Workspace
     size_t workspace_size;
