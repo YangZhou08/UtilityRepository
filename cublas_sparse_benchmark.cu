@@ -147,7 +147,7 @@ void runSparseMatmul(int m, int n, int k) {
 
 int main() {
     // Example: Multiply two 1024 x 1024 matrices
-    int m = 1024, n = 1024, k = 1024;
+    int m = 1024, n = 1024, k = 1024; 
 
     std::cout << "Starting cuSPARSELt sparse matrix multiplication benchmark..." << std::endl;
     runSparseMatmul(m, n, k);
