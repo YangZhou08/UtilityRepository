@@ -136,7 +136,8 @@ void runSparseMatmul(int m, int n, int k) {
 int main() {
     // int m = 1024, n = 1024, k = 1024; 
     // int m = 128, n = 128, k = 128; 
-    int m = 256, n = 256, k = 256; 
+    // int m = 256, n = 256, k = 256; 
+    int m = 512, n = 512, k = 512; 
 
     std::cout << "Starting cuSPARSELt sparse matrix multiplication benchmark..." << std::endl;
     runSparseMatmul(m, n, k);
