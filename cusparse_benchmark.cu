@@ -2,7 +2,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cuda_fp16.h> // For __half type
-#include <cusparseLt.h>
+#include <cusparseLt.h> 
+#include <cuda_runtime.h> 
 
 // Define matrix dimensions and parameters
 #define NUM_A_ROWS 128 // Number of rows in matrix A
@@ -59,6 +60,8 @@ int main() {
     cusparseLtMatmulAlgSelectionInit(&handle, &alg_sel, &matmul, CUSPARSELT_MATMUL_ALG_DEFAULT);
     cusparseLtMatmulPlanInit(&handle, &plan, &matmul, &alg_sel);
 
+    float elapsed_time_ms = 0.0f; 
+
     // Prune matrix A
     // Prune matrix A (in-place)
     cusparseStatus_t status = cusparseLtSpMMAPrune(
@@ -92,7 +95,15 @@ int main() {
     // size_t compressed_size;
     // cusparseLtSpMMACompressedSize(&handle, &plan, &compressed_size);
     size_t compressed_size;
-    size_t compress_buffer_size;
+    size_t compress_buffer_size; 
+
+    // Create CUDA events
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+
+    // Record the start event
+    cudaEventRecord(start, stream);
 
     cusparseLtSpMMACompressedSize(
         &handle,              // Pointer to cuSPARSELt handle
@@ -121,10 +132,37 @@ int main() {
     void *d_workspace = nullptr;
     if (workspace_size > 0) {
         cudaMalloc(&d_workspace, workspace_size);
-    }
+    } 
+
+    // Create CUDA events
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+
+    // Record the start event
+    cudaEventRecord(start, stream); 
 
     // Perform matrix multiplication
-    cusparseLtMatmul(&handle, &plan, &alpha, dA_compressed, dB, &beta, dC, dD, d_workspace, &stream, 0);
+    cusparseLtMatmul(&handle, &plan, &alpha, dA_compressed, dB, &beta, dC, dD, d_workspace, &stream, 0); 
+
+    // Record the stop event
+    cudaEventRecord(stop, stream);
+    cudaEventSynchronize(stop); 
+
+    // Calculate the elapsed time
+    cudaEventElapsedTime(&elapsed_time_ms, start, stop); 
+
+    // Print the elapsed time
+    if (matmul_status == CUSPARSE_STATUS_SUCCESS) {
+        std::cout << "Matrix multiplication completed in " << elapsed_time_ms << " ms" << std::endl;
+    } else {
+        std::cerr << "Matrix multiplication failed!" << std::endl;
+        return EXIT_FAILURE;
+    }
+
+    // Destroy CUDA events
+    cudaEventDestroy(start);
+    cudaEventDestroy(stop);
 
     // Cleanup
     cusparseLtMatDescriptorDestroy(&matA);
