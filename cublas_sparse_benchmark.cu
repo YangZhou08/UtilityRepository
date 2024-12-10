@@ -97,7 +97,7 @@ void runSparseMatmul(int m, int n, int k) {
     } 
 
     // Record the start event
-    cudaEventRecord(start, stream); 
+    cudaEventRecord(start, 0); 
 
     // Matrix multiplication
     // float alpha = 1.0f, beta = 0.0f; 
@@ -107,7 +107,7 @@ void runSparseMatmul(int m, int n, int k) {
 
     // Record the stop event 
     cudaDeviceSynchronize(); 
-    cudaEventRecord(stop, stream);
+    cudaEventRecord(stop, 0); 
     cudaEventSynchronize(stop); 
 
     // Calculate the elapsed time
