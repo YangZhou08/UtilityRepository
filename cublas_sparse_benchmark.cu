@@ -76,7 +76,13 @@ void runSparseMatmul(int m, int n, int k) {
 
     // Define matrix layouts
     cublasLtMatrixLayout_t layoutA, layoutB, layoutC;
-    cublasLtMatrixLayoutCreate(&layoutA, CUDA_R_32F, m, k, m); // Leading dimension = m
+    cublasLtMatrixLayoutCreate(&layoutA, CUDA_R_32F, m, k, m); // Leading dimension = m 
+
+    cublasLtMatrixLayoutSetAttribute(layoutA, 
+                                  CUBLASLT_MATRIX_LAYOUT_SPARSE_MODE, 
+                                  &CUBLASLT_SPARSITY_2_4, 
+                                  sizeof(CUBLASLT_SPARSITY_2_4)); 
+    
     cublasLtMatrixLayoutCreate(&layoutB, CUDA_R_32F, k, n, k); // Leading dimension = k
     cublasLtMatrixLayoutCreate(&layoutC, CUDA_R_32F, m, n, m); // Leading dimension = m
 
@@ -88,7 +94,26 @@ void runSparseMatmul(int m, int n, int k) {
     cublasLtMatmulAlgo_t algo;
     // cublasLtMatmulAlgoInit(handle, CUBLAS_COMPUTE_32F, CUDA_R_32F, layoutA, layoutB, layoutC, layoutC, &algo); 
     // cublasLtMatmulAlgoInit(handle, CUBLAS_COMPUTE_32F, CUDA_R_32F, m, n, k, &algo); 
-    cublasLtMatmulAlgoInit(handle, CUBLAS_COMPUTE_32F, CUDA_R_32F, layoutA, layoutB, layoutC, layoutC, &algo);
+    cublasStatus_t status = cublasLtMatmulAlgoInit(
+        handle,                 // cublasLtHandle_t
+        CUBLAS_COMPUTE_32F,     // Compute type
+        CUDA_R_32F,             // Scale type
+        CUDA_R_32F,             // A type
+        CUDA_R_32F,             // B type
+        CUDA_R_32F,             // C type
+        CUDA_R_32F,             // D type
+        0,                      // Default algorithm ID
+        &algo                   // Algorithm descriptor
+    ); 
+
+    if (status != CUBLAS_STATUS_SUCCESS) {
+        std::cerr << "Error initializing cublasLtMatmulAlgo for 2-out-of-4 sparsity: " << status << std::endl;
+        return;
+    } 
+
+    // Enable 2-out-of-4 sparsity on A
+    cublasLtMatmulAlgoConfigSetAttribute(&algo, CUBLASLT_ALGO_CONFIG_SPARSE_MODE, 
+                                        &CUBLASLT_SPARSITY_2_4, sizeof(CUBLASLT_SPARSITY_2_4));
 
     // Perform matrix multiplication
     const float alpha = 1.0f, beta = 0.0f; 
