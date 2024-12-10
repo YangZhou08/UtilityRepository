@@ -70,22 +70,32 @@ void runSparseMatmul(int m, int n, int k) {
     cusparseLtMatmulGetWorkspace(&handle, &plan, &workspace_size);
     if (workspace_size > 0) {
         cudaMalloc(&d_workspace, workspace_size);
-    }
+    } 
+
+    int num_iterations = 1000; 
 
     // Timer
     auto start = std::chrono::high_resolution_clock::now();
 
     // Matrix multiplication
-    float alpha = 1.0f, beta = 0.0f;
-    cusparseLtMatmul(&handle, &plan, &alpha, d_A_compressed, d_B, &beta, d_C, d_C, d_workspace, nullptr, 0);
-
-    cudaDeviceSynchronize();
+    float alpha = 1.0f, beta = 0.0f; 
+    for (int i = 0; i < num_iterations; ++i) {
+        cusparseLtMatmul(&handle, &plan, &alpha, d_A_compressed, d_B, &beta, d_C, d_C, d_workspace, nullptr, 0); 
+        cudaDeviceSynchronize();
+    } 
 
     auto end = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> elapsed = end - start;
+    std::chrono::duration<double> elapsed = end - start; 
+
+    // Calculate average runtime
+    double avg_time_per_iteration = elapsed.count() / num_iterations; 
 
     std::cout << "Sparse matrix multiplication (m=" << m << ", n=" << n << ", k=" << k
-              << ") took " << elapsed.count() << " seconds." << std::endl;
+          << ") average runtime over " << num_iterations << " iterations: "
+          << avg_time_per_iteration << " seconds." << std::endl; 
+
+    // std::cout << "Sparse matrix multiplication (m=" << m << ", n=" << n << ", k=" << k
+    //           << ") took " << elapsed.count() << " seconds." << std::endl; 
 
     // Cleanup
     cudaFree(d_A);
