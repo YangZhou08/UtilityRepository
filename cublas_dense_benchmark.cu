@@ -42,7 +42,7 @@ void runDenseMatmul(int m, int n, int k) {
 
     // Create cuBLAS handle
     cublasHandle_t handle;
-    cublasCreate(&handle); 
+    CHECK_CUBLAS(cublasCreate(&handle)); 
 
     int num_iterations = 1000;  
 
@@ -50,45 +50,45 @@ void runDenseMatmul(int m, int n, int k) {
     const float alpha = 1.0f, beta = 0.0f; 
 
     for (int i = 0; i < 10; ++i) {
-        cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N,
+        CHECK_CUBLAS(cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N,
                     m, n, k,             // Matrix dimensions
                     &alpha,              // Alpha
                     d_A, m,              // Matrix A and leading dimension
                     d_B, k,              // Matrix B and leading dimension
                     &beta,               // Beta
-                    d_C, m);             // Matrix C and leading dimension 
+                    d_C, m));             // Matrix C and leading dimension 
     } 
 
-    cudaDeviceSynchronize(); 
+    CHECK_CUDA(cudaDeviceSynchronize()); 
 
     // Record the start event
     cudaEventRecord(start, 0); 
 
     for (int i = 0; i < num_iterations; ++i) {
-        cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N,
+        CHECK_CUBLAS(cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N,
                     m, n, k,             // Matrix dimensions
                     &alpha,              // Alpha
                     d_A, m,              // Matrix A and leading dimension
                     d_B, k,              // Matrix B and leading dimension
                     &beta,               // Beta
-                    d_C, m);             // Matrix C and leading dimension 
+                    d_C, m));             // Matrix C and leading dimension 
     } 
 
     // Record the stop event 
     // cudaDeviceSynchronize(); 
-    cudaEventRecord(stop, 0); 
-    cudaEventSynchronize(stop); 
+    CHECK_CUDA(cudaEventRecord(stop, 0)); 
+    CHECK_CUDA(cudaEventSynchronize(stop)); 
     // cudaEventSynchronize(stop); 
 
     // Calculate the elapsed time
-    cudaEventElapsedTime(&elapsed_time_ms, start, stop); 
+    CHECK_CUDA(cudaEventElapsedTime(&elapsed_time_ms, start, stop)); 
 
     // Calculate average runtime
     double avg_time_per_iteration = elapsed_time_ms / num_iterations; 
 
     std::cout << "Sparse matrix multiplication (m=" << m << ", n=" << n << ", k=" << k
           << ") average runtime over " << num_iterations << " iterations: "
-          << avg_time_per_iteration << " seconds." << std::endl; 
+          << avg_time_per_iteration << " ms" << std::endl; 
 
     // std::cout << "Dense matrix multiplication (m=" << m << ", n=" << n << ", k=" << k
     //           << ") took " << elapsed.count() << " seconds." << std::endl; 
