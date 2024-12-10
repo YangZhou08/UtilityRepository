@@ -66,7 +66,7 @@ void runSparseMatmul(int m, int n, int k) {
     cusparseStatus_t compress_status = cusparseLtSpMMACompress(
         &handle,              // Pointer to cuSPARSELt handle
         &plan,                // Pointer to matmul plan
-        dA,                   // Dense input matrix (device pointer)
+        d_A,                   // Dense input matrix (device pointer)
         d_A_compressed,       // Output compressed matrix (device pointer)
         compress_buffer,      // Temporary buffer for compression (device pointer)
         stream                // CUDA stream
