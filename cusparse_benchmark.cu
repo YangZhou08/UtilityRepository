@@ -94,12 +94,12 @@ int main() {
     size_t compressed_size;
     size_t compress_buffer_size;
 
-    cusparseStatus_t status = cusparseLtSpMMACompressedSize(
+    cusparseLtSpMMACompressedSize(
         &handle,              // Pointer to cuSPARSELt handle
         &plan,                // Pointer to matmul plan
         &compressed_size,     // Pointer to store compressed size
         &compress_buffer_size // Pointer to store buffer size
-    );
+    ); 
     
     void *dA_compressed; 
     void* compress_buffer; 
