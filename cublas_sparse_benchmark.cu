@@ -19,11 +19,19 @@ void convertTo2OutOf4Sparsity(const std::vector<float>& dense, std::vector<float
     for (int i = 0; i < rows; ++i) {
         for (int j = 0; j < cols; j += 4) {
             // Retain the two largest values in every 4-element block
-            std::array<int, 4> indices = {j, j + 1, j + 2, j + 3};
-            std::partial_sort(indices.begin(), indices.begin() + 2, indices.end(),
-                              [&dense, i, cols](int lhs, int rhs) {
-                                  return std::abs(dense[i * cols + lhs]) > std::abs(dense[i * cols + rhs]);
-                              });
+            // std::array<int, 4> indices = {j, j + 1, j + 2, j + 3}; 
+            std::vector<int> indices = {j, j + 1, j + 2, j + 3};
+            // std::partial_sort(indices.begin(), indices.begin() + 2, indices.end(),
+            //                   [&dense, i, cols](int lhs, int rhs) {
+            //                       return std::abs(dense[i * cols + lhs]) > std::abs(dense[i * cols + rhs]); 
+            //                   }); 
+            for (int a = 0; a < 2; ++a) {
+                for (int b = a + 1; b < 4; ++b) {
+                    if (std::abs(dense[i * cols + indices[b]]) > std::abs(dense[i * cols + indices[a]])) {
+                        std::swap(indices[a], indices[b]);
+                    }
+                }
+            } 
 
             for (int k = 0; k < 4; ++k) {
                 if (k == indices[0] % 4 || k == indices[1] % 4) {
@@ -77,16 +85,21 @@ void runSparseMatmul(int m, int n, int k) {
     cublasLtMatmulDescCreate(&matmulDesc, CUBLAS_COMPUTE_32F, CUDA_R_32F);
 
     // Perform matrix multiplication
-    const float alpha = 1.0f, beta = 0.0f;
+    const float alpha = 1.0f, beta = 0.0f; 
 
-    auto start = std::chrono::high_resolution_clock::now();
+    size_t workspace_size = 1024 * 1024 * 8; // Example: 8 MB
+    void* workspace;
+    cudaMalloc(&workspace, workspace_size); 
+
+    auto start = std::chrono::high_resolution_clock::now(); 
 
     cublasLtMatmul(
         handle, matmulDesc,
         &alpha, d_A, layoutA, // Sparse A
         d_B, layoutB,         // Dense B
         &beta, d_C, layoutC,  // Output C
-        nullptr, nullptr, 0, nullptr);
+        // nullptr, nullptr, 0, nullptr 
+        nullptr, workspace, workspace_size, nullptr); 
 
     cudaDeviceSynchronize();
 
@@ -107,7 +120,8 @@ void runSparseMatmul(int m, int n, int k) {
     cublasLtDestroy(handle);
     cudaFree(d_A);
     cudaFree(d_B);
-    cudaFree(d_C);
+    cudaFree(d_C); 
+    cudaFree(workspace); 
 }
 
 int main() {
